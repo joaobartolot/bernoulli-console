@@ -18,8 +18,6 @@ responsibilities.
 
 ## POC Milestone
 
-- [ ] Confirm dashboard tag contract with `bernoulli-gateway`
-- [ ] Confirm dashboard API shape with `bernoulli-observability`
 - [ ] Load telemetry for one configured gateway
 - [ ] Add refresh-rate selector for polling the API
 - [ ] Render pump state
@@ -52,13 +50,10 @@ dashboard until a configurable dashboard model is justified.
 
 ---
 
-## Gateway Tag Contract
+## Expected Tags
 
-- [ ] Define stable tag names in `gateway.yaml`
-- [ ] Document required tank tags
-- [ ] Document optional tank tags
-- [ ] Decide where units and display labels live for the POC
-- [ ] Keep missing optional tags from breaking the UI
+These are suggested tag names for the POC dashboard. They are inputs consumed by
+the console, not implementation tasks for this project.
 
 Suggested required tags:
 
@@ -83,19 +78,6 @@ tank_2_level_percent
 tank_3_level_percent
 production_total
 ```
-
----
-
-## API Integration
-
-- [ ] Confirm telemetry history endpoint
-- [ ] Confirm latest-state endpoint availability or derive latest state locally
-- [ ] Confirm filtering by `gateway_id`
-- [ ] Confirm filtering by `tag_name`
-- [ ] Confirm filtering by time range
-- [ ] Confirm bounded query support with `limit`
-- [ ] Use `source_timestamp` as preferred event time
-- [ ] Fallback to `collected_at` when `source_timestamp` is missing
 
 ---
 
