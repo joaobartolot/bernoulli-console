@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --chart-tank_1: theme('colors.coral.500');
+  --chart-tank_2: theme('colors.dusk.500');
+  --chart-tank_3: theme('colors.lavender.500');
+  --chart-grid: theme('colors.bronze.800');
+}
+
 body {
   margin: 0;
   min-width: 320px;
