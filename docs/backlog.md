@@ -42,8 +42,9 @@ The telemetry path is:
 PLC -> bernoulli-gateway -> bernoulli-observability API -> bernoulli-console
 ```
 
-Telemetry is cycle-based at the gateway. The console should poll the API on a
-selected interval instead of treating the data as real time.
+The current dashboard polls the API for POC visibility. The next dashboard
+iteration should load current state once and then consume live state updates
+from the observability API.
 
 There is no company/client model yet. Treat this as one client-specific
 dashboard until a configurable dashboard model is justified.
@@ -150,10 +151,36 @@ production_total
 
 - [ ] Use a latest-state endpoint when available to avoid polling full history for
       current values
+- [ ] Use a machine-state endpoint when available so the frontend does not own
+      tag-to-machine-state business rules.
+- [ ] Split dashboard data loading into:
+      - current state for cards/status
+      - history/aggregates for charts
 - [ ] Use backend daily/monthly/yearly production aggregates when available
 - [ ] Confirm browser CORS settings for local Vite access to the observability API
 - [ ] Revisit the `limit=5000` history cap once production history grows beyond
       the POC data volume
+
+---
+
+## Live State Updates
+
+- [ ] Add a telemetry stream service using `EventSource` when the backend SSE
+      endpoint exists.
+- [ ] Load current state before opening the stream so refresh/reconnect starts
+      from a complete snapshot.
+- [ ] Merge incoming live updates into dashboard state without refetching full
+      history.
+- [ ] Keep manual refresh as a resync action for connection recovery.
+- [ ] Show live connection state:
+      - connecting
+      - live
+      - reconnecting
+      - stale
+      - offline
+- [ ] Treat analog values as latest state only; avoid appending every live
+      flowmeter update into chart history on the client.
+- [ ] Keep fixed-rate polling only as a fallback mode while SSE is unavailable.
 
 ---
 
@@ -165,7 +192,7 @@ production_total
 - [ ] Dashboard builder or configurable layouts
 - [ ] Gateway config editor
 - [ ] Backend business logic in the frontend
-- [ ] WebSocket, SSE, or true real-time updates
+- [ ] WebSocket command/control interactions
 - [ ] Alerting
 - [ ] Historical report exports
 - [ ] Complex chart interactions
@@ -177,8 +204,8 @@ production_total
 Implement the smallest useful vertical slice:
 
 ```text
-poll telemetry on selected interval -> derive tank/pump latest state -> render three tank summaries
+load latest state -> render tank/pump state -> subscribe to live updates -> merge updates into current state
 ```
 
-After that, add production totals and charts once the event shape and aggregation
-strategy are clear.
+After that, move production totals and charts to dedicated history or aggregate
+API calls.

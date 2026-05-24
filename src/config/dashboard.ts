@@ -31,6 +31,7 @@ export const tankConfigs: TankConfig[] = [
 
 export const refreshRateOptions = [
   { label: 'Paused', value: 0 },
+  { label: '1s', value: 1 },
   { label: '5s', value: 5 },
   { label: '10s', value: 10 },
   { label: '30s', value: 30 },
