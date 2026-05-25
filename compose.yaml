@@ -1,0 +1,9 @@
+services:
+  console:
+    build:
+      context: .
+      args:
+        VITE_BERNOULLI_API_URL: ${VITE_BERNOULLI_API_URL:-http://localhost:8080}
+        VITE_BERNOULLI_GATEWAY_ID: ${VITE_BERNOULLI_GATEWAY_ID:-gateway-simulator}
+    ports:
+      - "5173:80"

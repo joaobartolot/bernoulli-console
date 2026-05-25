@@ -60,6 +60,18 @@ App runs at:
 http://localhost:5173
 ```
 
+Run with Docker Compose:
+
+```bash
+docker compose up
+```
+
+The container serves the production build at:
+
+```text
+http://localhost:5173
+```
+
 ---
 
 ## Build
