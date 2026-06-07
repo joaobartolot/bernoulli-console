@@ -9,7 +9,17 @@
   --chart-grid: theme('colors.bronze.800');
 }
 
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   min-width: 320px;
+}
+
+#root {
+  height: 100%;
 }

@@ -22,6 +22,14 @@ export type ProductionShare = {
   fill: string
 }
 
+export type RecentEvent = {
+  id: string
+  time: Date
+  event: string
+  details: string
+  status: 'Success' | 'Info' | 'Warning'
+}
+
 export type TankSummary = {
   id: TankId
   name: string
@@ -34,6 +42,8 @@ export type TankSummary = {
   todayProduction: number
   monthProduction: number
   yearProduction: number
+  previousYearProduction: number
+  yearChangePercent: number | null
 }
 
 export type DashboardTelemetry = {
@@ -45,7 +55,14 @@ export type DashboardTelemetry = {
   dailyProduction: ProductionPoint[]
   monthlyProduction: ProductionPoint[]
   productionShare: ProductionShare[]
+  recentEvents: RecentEvent[]
+  activeTank: TankSummary | null
+  totalCurrentFlow: number
   totalYearProduction: number
+  previousYearProduction: number
+  yearChangePercent: number | null
   lastEventTime: Date | null
   hasFlowData: boolean
+  alertCount: number
+  healthStatus: 'normal' | 'warning'
 }

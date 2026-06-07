@@ -18,6 +18,7 @@ const historyLimit = 5000
 
 export function useDashboardTelemetry(
   refreshIntervalSeconds: number,
+  selectedDate: Date,
 ): DashboardTelemetryState {
   const [events, setEvents] = useState<TelemetryEvent[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -25,40 +26,46 @@ export function useDashboardTelemetry(
   const [error, setError] = useState<string | null>(null)
   const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null)
 
-  const loadTelemetry = useCallback(async (signal?: AbortSignal) => {
-    setIsRefreshing(true)
+  const loadTelemetry = useCallback(
+    async (signal?: AbortSignal) => {
+      setIsRefreshing(true)
 
-    try {
-      const from = new Date(new Date().getFullYear(), 0, 1).toISOString()
-      const history = await fetchTelemetryHistory(
-        {
-          gatewayId,
-          from,
-          limit: historyLimit,
-        },
-        signal,
-      )
+      try {
+        const year = selectedDate.getFullYear()
+        const from = new Date(year - 1, 0, 1).toISOString()
+        const to = new Date(year + 1, 0, 1).toISOString()
+        const history = await fetchTelemetryHistory(
+          {
+            gatewayId,
+            from,
+            to,
+            limit: historyLimit,
+          },
+          signal,
+        )
 
-      setEvents(history)
-      setError(null)
-      setLastLoadedAt(new Date())
-    } catch (loadError) {
-      if (signal?.aborted) {
-        return
+        setEvents(history)
+        setError(null)
+        setLastLoadedAt(new Date())
+      } catch (loadError) {
+        if (signal?.aborted) {
+          return
+        }
+
+        setError(
+          loadError instanceof Error
+            ? loadError.message
+            : 'Telemetry request failed',
+        )
+      } finally {
+        if (!signal?.aborted) {
+          setIsLoading(false)
+          setIsRefreshing(false)
+        }
       }
-
-      setError(
-        loadError instanceof Error
-          ? loadError.message
-          : 'Telemetry request failed',
-      )
-    } finally {
-      if (!signal?.aborted) {
-        setIsLoading(false)
-        setIsRefreshing(false)
-      }
-    }
-  }, [])
+    },
+    [selectedDate],
+  )
 
   useEffect(() => {
     const controller = new AbortController()
@@ -84,7 +91,10 @@ export function useDashboardTelemetry(
     return () => window.clearInterval(interval)
   }, [loadTelemetry, refreshIntervalSeconds])
 
-  const dashboard = useMemo(() => buildDashboardTelemetry(events), [events])
+  const dashboard = useMemo(
+    () => buildDashboardTelemetry(events, selectedDate),
+    [events, selectedDate],
+  )
 
   return {
     dashboard,

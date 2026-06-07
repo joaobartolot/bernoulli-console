@@ -2,10 +2,12 @@ import { tankConfigs } from '../config/dashboard'
 import type {
   DashboardTelemetry,
   ProductionPoint,
+  RecentEvent,
   TankId,
   TankSummary,
 } from '../types/dashboard'
 import type { TelemetryEvent } from '../types/telemetry'
+import { formatFlow, formatStatus } from './format'
 
 const tankIds: TankId[] = ['tank_1', 'tank_2', 'tank_3']
 const maxSegmentMinutes = 5
@@ -68,13 +70,28 @@ export function toBoolean(value: unknown): boolean | null {
 
 export function buildDashboardTelemetry(
   events: TelemetryEvent[],
+  selectedDate = new Date(),
 ): DashboardTelemetry {
   const now = new Date()
+  const dayStart = startOfDay(selectedDate)
+  const dayEnd = minDate(addDays(dayStart, 1), now)
+  const monthStart = startOfMonth(selectedDate)
+  const monthEnd = minDate(addMonths(monthStart, 1), now)
+  const yearStart = startOfYear(selectedDate)
+  const yearEnd = minDate(addYears(yearStart, 1), now)
+  const previousYearStart = addYears(yearStart, -1)
+  const previousYearEnd = addYears(yearEnd, -1)
   const pump = latestEventByTag(events, 'pump')
   const tanks = tankConfigs.map((tank): TankSummary => {
     const latestFlowEvent = latestEventByTag(events, tank.flowTag)
     const latestValveEvent = latestEventByTag(events, tank.valveTag)
     const flowEvents = events.filter((event) => event.tag_name === tank.flowTag)
+    const yearProduction = productionSince(flowEvents, yearStart, yearEnd)
+    const previousYearProduction = productionSince(
+      flowEvents,
+      previousYearStart,
+      previousYearEnd,
+    )
 
     return {
       ...tank,
@@ -82,16 +99,28 @@ export function buildDashboardTelemetry(
       valveOpen: latestValveEvent ? toBoolean(latestValveEvent.value) : null,
       quality: latestFlowEvent?.quality ?? latestValveEvent?.quality ?? null,
       lastEventTime: latestFlowEvent ? eventTime(latestFlowEvent) : null,
-      todayProduction: productionSince(flowEvents, startOfDay(now), now),
-      monthProduction: productionSince(flowEvents, startOfMonth(now), now),
-      yearProduction: productionSince(flowEvents, startOfYear(now), now),
+      todayProduction: productionSince(flowEvents, dayStart, dayEnd),
+      monthProduction: productionSince(flowEvents, monthStart, monthEnd),
+      yearProduction,
+      previousYearProduction,
+      yearChangePercent: percentChange(yearProduction, previousYearProduction),
     }
   })
 
-  const dailyProduction = buildDailyProduction(events, now)
-  const monthlyProduction = buildMonthlyProduction(events, now)
+  const dailyProduction = [
+    productionPoint('Selected day', events, dayStart, dayEnd),
+  ]
+  const monthlyProduction = buildMonthlyProduction(
+    events,
+    selectedDate,
+    yearEnd,
+  )
   const totalYearProduction = tanks.reduce(
     (total, tank) => total + tank.yearProduction,
+    0,
+  )
+  const previousYearProduction = tanks.reduce(
+    (total, tank) => total + tank.previousYearProduction,
     0,
   )
   const productionShare = tanks.map((tank) => ({
@@ -99,6 +128,15 @@ export function buildDashboardTelemetry(
     value: tank.yearProduction,
     fill: `var(--chart-${tank.id})`,
   }))
+  const activeTank =
+    tanks.find((tank) => tank.valveOpen && (tank.latestFlow ?? 0) > 0) ??
+    tanks.find((tank) => tank.valveOpen) ??
+    null
+  const totalCurrentFlow = tanks.reduce(
+    (total, tank) => total + Math.max(tank.latestFlow ?? 0, 0),
+    0,
+  )
+  const alertCount = countAlerts(events, now)
 
   return {
     events,
@@ -109,11 +147,21 @@ export function buildDashboardTelemetry(
     dailyProduction,
     monthlyProduction,
     productionShare,
+    recentEvents: buildRecentEvents(events),
+    activeTank,
+    totalCurrentFlow,
     totalYearProduction,
+    previousYearProduction,
+    yearChangePercent: percentChange(
+      totalYearProduction,
+      previousYearProduction,
+    ),
     lastEventTime: latestEventTime(events),
     hasFlowData: events.some((event) =>
       tankConfigs.some((tank) => tank.flowTag === event.tag_name),
     ),
+    alertCount,
+    healthStatus: alertCount > 0 ? 'warning' : 'normal',
   }
 }
 
@@ -162,25 +210,20 @@ function productionBetween(
   return total
 }
 
-function buildDailyProduction(
-  events: TelemetryEvent[],
-  now: Date,
-): ProductionPoint[] {
-  return Array.from({ length: 7 }, (_, offset) => {
-    const day = addDays(startOfDay(now), offset - 6)
-    const nextDay = addDays(day, 1)
-    return productionPoint(shortDayLabel(day), events, day, nextDay)
-  })
-}
-
 function buildMonthlyProduction(
   events: TelemetryEvent[],
-  now: Date,
+  selectedDate: Date,
+  yearEnd: Date,
 ): ProductionPoint[] {
-  return Array.from({ length: now.getMonth() + 1 }, (_, monthIndex) => {
-    const month = new Date(now.getFullYear(), monthIndex, 1)
-    const nextMonth = new Date(now.getFullYear(), monthIndex + 1, 1)
-    return productionPoint(shortMonthLabel(month), events, month, nextMonth)
+  return Array.from({ length: 12 }, (_, monthIndex) => {
+    const month = new Date(selectedDate.getFullYear(), monthIndex, 1)
+    const nextMonth = new Date(selectedDate.getFullYear(), monthIndex + 1, 1)
+    return productionPoint(
+      shortMonthLabel(month),
+      events,
+      month,
+      minDate(nextMonth, yearEnd),
+    )
   })
 }
 
@@ -214,6 +257,85 @@ function latestEventTime(events: TelemetryEvent[]): Date | null {
   }, null)
 }
 
+function buildRecentEvents(events: TelemetryEvent[]): RecentEvent[] {
+  return [...events]
+    .sort(
+      (left, right) => eventTime(right).getTime() - eventTime(left).getTime(),
+    )
+    .slice(0, 4)
+    .map((event): RecentEvent => {
+      const tank = tankConfigs.find(
+        (config) =>
+          config.flowTag === event.tag_name ||
+          config.valveTag === event.tag_name,
+      )
+
+      return {
+        id: event.event_id,
+        time: eventTime(event),
+        event: eventTitle(event, tank?.name),
+        details: eventDetails(event, tank?.name),
+        status:
+          event.quality === 'GOOD'
+            ? event.tag_name.includes('flow')
+              ? 'Info'
+              : 'Success'
+            : 'Warning',
+      }
+    })
+}
+
+function eventTitle(event: TelemetryEvent, tankName?: string): string {
+  if (event.tag_name === 'pump') {
+    return toBoolean(event.value) ? 'Pump Started' : 'Pump Stopped'
+  }
+
+  if (event.tag_name.includes('valve')) {
+    return `${tankName ?? 'Tank'} Valve ${toBoolean(event.value) ? 'Opened' : 'Closed'}`
+  }
+
+  if (event.tag_name.includes('flow')) {
+    return `${tankName ?? 'Tank'} Flow Updated`
+  }
+
+  return event.tag_name
+}
+
+function eventDetails(event: TelemetryEvent, tankName?: string): string {
+  if (event.tag_name === 'pump') {
+    return `Pump status changed to ${formatStatus(toBoolean(event.value))}`
+  }
+
+  if (event.tag_name.includes('valve')) {
+    return `${tankName ?? 'Tank'} valve is ${formatStatus(toBoolean(event.value))}`
+  }
+
+  if (event.tag_name.includes('flow')) {
+    return `${tankName ?? 'Tank'} flow is ${formatFlow(toNumber(event.value))}`
+  }
+
+  return `Quality ${event.quality}`
+}
+
+function countAlerts(events: TelemetryEvent[], now: Date): number {
+  const badQualityCount = events.filter(
+    (event) => event.quality !== 'GOOD',
+  ).length
+  const latest = latestEventTime(events)
+  const staleCount =
+    latest && now.getTime() - latest.getTime() > 5 * 60 * 1000 ? 1 : 0
+
+  return badQualityCount + staleCount
+}
+
+function percentChange(current: number, previous: number): number | null {
+  if (previous <= 0) {
+    return null
+  }
+
+  return ((current - previous) / previous) * 100
+}
+
 function cappedEnd(time: Date): number {
   return time.getTime() + maxSegmentMinutes * 60 * 1000
 }
@@ -238,8 +360,20 @@ function addDays(value: Date, days: number): Date {
   return new Date(value.getFullYear(), value.getMonth(), value.getDate() + days)
 }
 
-function shortDayLabel(value: Date): string {
-  return value.toLocaleDateString('en-US', { weekday: 'short' })
+function addMonths(value: Date, months: number): Date {
+  return new Date(value.getFullYear(), value.getMonth() + months, 1)
+}
+
+function addYears(value: Date, years: number): Date {
+  return new Date(
+    value.getFullYear() + years,
+    value.getMonth(),
+    value.getDate(),
+  )
+}
+
+function minDate(left: Date, right: Date): Date {
+  return left.getTime() < right.getTime() ? left : right
 }
 
 function shortMonthLabel(value: Date): string {
